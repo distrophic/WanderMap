@@ -1,0 +1,214 @@
+/* ===== База ===== */
+QMainWindow, QWidget#sidePanel {
+    background: #FFFFFF;
+    color: #000000;
+}
+
+QLabel {
+    color: #000000;
+    background: transparent;
+}
+
+QLabel#secondaryLabel {
+    color: #6B6B6B;
+    font-size: 12px;
+}
+
+/* ===== Поле поиска ===== */
+QLineEdit#searchField {
+    background: #F3F3F3;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+    color: #000000;
+}
+
+QLineEdit#searchField:focus {
+    background: #EEEEEE;
+    border: 2px solid #000000;
+    padding: 10px 14px; /* компенсируем рамку, чтобы текст не прыгал */
+}
+
+QLineEdit#searchField::placeholder {
+    color: #6B6B6B;
+}
+
+/* ===== Главная кнопка ===== */
+QPushButton#primaryButton {
+    background: #000000;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QPushButton#primaryButton:hover {
+    background: #333333;
+}
+
+QPushButton#primaryButton:pressed {
+    background: #555555;
+}
+
+/* ===== Второстепенные кнопки ===== */
+QPushButton {
+    background: transparent;
+    color: #000000;
+    border: 1px solid #E2E2E2;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+}
+
+QPushButton:hover {
+    background: #F6F6F6;
+}
+
+QPushButton:pressed {
+    background: #EEEEEE;
+}
+
+/* ===== Список мест (карточки) ===== */
+QListWidget#placesList {
+    background: transparent;
+    border: none;
+    outline: none; /* убирает пунктирную рамку фокуса */
+}
+
+QListWidget#placesList::item {
+    background: #FFFFFF;
+    border: 1px solid #EEEEEE;
+    border-radius: 10px;
+    padding: 14px;
+    margin: 4px 8px;
+    color: #000000;
+}
+
+QListWidget#placesList::item:hover {
+    background: #F6F6F6;
+}
+
+QListWidget#placesList::item:selected {
+    background: #F6F6F6;
+    border: 1px solid #000000;
+    color: #000000;
+}
+
+/* ===== Выпадающий список (фильтр категорий) ===== */
+QComboBox#categoryFilter {
+    background: #F3F3F3;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+}
+
+QComboBox#categoryFilter::drop-down {
+    border: none;
+    width: 28px;
+}
+
+QComboBox QAbstractItemView {
+    background: #FFFFFF;
+    border: 1px solid #E2E2E2;
+    border-radius: 8px;
+    selection-background-color: #F6F6F6;
+    selection-color: #000000;
+    outline: none;
+}
+
+/* ===== Скроллбар ===== */
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #D6D6D6;
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #B0B0B0;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+
+/* ===== Тултипы ===== */
+QToolTip {
+    background: #000000;
+    color: #FFFFFF;
+    border: none;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+/* Базовый цвет текста для всего приложения */
+QWidget {
+    color: #1a1a1a;
+}
+
+/* Комбобоксы: читаемый текст и явная рамка */
+QComboBox {
+    color: #1a1a1a;
+    background: #ffffff;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+QComboBox QAbstractItemView {
+    color: #1a1a1a;
+    background: #ffffff;
+    selection-background-color: #e8e8e8;
+    selection-color: #1a1a1a;
+}
+
+/* Чекбоксы: вместо чёрных квадратов */
+QCheckBox {
+    color: #1a1a1a;
+    spacing: 6px;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #b0b0b0;
+    border-radius: 4px;
+    background: #ffffff;
+}
+QCheckBox::indicator:checked {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+}
+
+/* Скроллбары */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+}
+QScrollBar::handle {
+    background: #c9c9c9;
+    border-radius: 5px;
+    min-height: 30px;
+    min-width: 30px;
+}
+QScrollBar::handle:hover {
+    background: #a8a8a8;
+}
+QScrollBar::add-line, QScrollBar::sub-line {
+    width: 0; height: 0;
+}
