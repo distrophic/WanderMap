@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<script src="leaflet/leaflet.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<style>
+    html, body, #map { height: 100%; margin: 0; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    const map = L.map('map').setView([48.8566, 2.3522], 4);
+    var tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    maxZoom: 20
+}).addTo(map);
+tiles.on('tileerror', function(e) {
+    console.log('TILE ERROR: ' + e.tile.src);
+});
+window.onerror = function(msg, src, line) {
+    console.log('JS ERROR: ' + msg + ' @ ' + src + ':' + line);
+};
+
+    // Мост в Qt: клики по маркерам уходят в Python (MapBridge).
+    let bridge = null;
+    new QWebChannel(qt.webChannelTransport, ch => { bridge = ch.objects.bridge; });
+
+    let markers = [];
+
+    // Вызывается из Python через runJavaScript при каждом refresh().
+    function setPlaces(places) {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+
+        for (const p of places) {
+            if (!p.latitude && !p.longitude) continue; // место без координат
+
+            const m = L.marker([p.latitude, p.longitude]).addTo(map);
+            const marks = (p.is_favorite ? '⭐ ' : '') + (p.is_famous ? '🏛 ' : '');
+            const where = [p.city, p.country].filter(Boolean).join(', ');
+            m.bindPopup(`<b>${esc(p.name)}</b><br>${marks}${esc(where)}`);
+            m.on('click', () => { if (bridge) bridge.onMarkerClicked(p.id); });
+            markers.push(m);
+        }
+
+        if (markers.length) {
+            map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2),
+                          { maxZoom: 10 });
+        }
+    }
+
+    // Вызывается из Python при выборе места в списке.
+    function focusPlace(lat, lon) {
+        map.setView([lat, lon], 13);
+    }
+
+    // Имена и описания приходят из БД и Nominatim — экранируем,
+    // чтобы место с «<b>» в названии не ломало попап.
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;',
+            '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+</script>
+</body>
+</html>
