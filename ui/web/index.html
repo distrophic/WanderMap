@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WanderMap</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.4 "Segoe UI", sans-serif;
+    color: #1a1a1a;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  header {
+    padding: 10px 16px;
+    border-bottom: 1px solid #e4e4e4;
+    font-weight: 600;
+  }
+  main {
+    display: grid;
+    grid-template-columns: 380px minmax(0, 1fr);
+    min-height: 0;
+  }
+  .side {
+    overflow: auto;
+    padding: 12px;
+    border-right: 1px solid #e4e4e4;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  form, .card {
+    border: 1px solid #e4e4e4;
+    border-radius: 10px;
+    padding: 12px;
+    background: #fff;
+  }
+  label { display: block; margin: 8px 0 4px; color: #444; }
+  input, select, textarea, button {
+    font: inherit;
+    width: 100%;
+  }
+  input, select, textarea {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  textarea { min-height: 64px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  button {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: #1f6feb;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .suggestions {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    max-height: 160px;
+    overflow: auto;
+  }
+  .suggestions button {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    color: #1a1a1a;
+    text-align: left;
+    cursor: pointer;
+  }
+  .suggestions button:hover { background: #f3f6fb; }
+  .hint, .status { color: #666; min-height: 1.2em; }
+  .status.error { color: #a32020; }
+  .card h2 { margin: 0 0 4px; font-size: 16px; }
+  .card p { margin: 4px 0; }
+  .card img { width: 100%; border-radius: 8px; margin-top: 8px; }
+  .card input[type="file"] { margin-top: 8px; }
+  #map { height: 100%; min-height: 240px; background: #f4f4f4; }
+  @media (max-width: 800px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 280px minmax(0, 1fr); }
+    #map { order: -1; }
+    .side { border-right: 0; }
+  }
+</style>
+</head>
+<body>
+<header>WanderMap</header>
+<main>
+  <div class="side">
+    <form id="place-form">
+      <label for="name">Название</label>
+      <input id="name" name="name" autocomplete="off" placeholder="Начните вводить — появятся подсказки">
+      <div class="hint" id="hint"></div>
+      <ul class="suggestions" id="suggestions" hidden></ul>
+
+      <label for="category">Категория</label>
+      <select id="category">
+        <option>Достопримечательность</option>
+        <option>Музей</option>
+        <option>Парк</option>
+        <option>Ресторан</option>
+        <option>Кафе</option>
+        <option>Отель</option>
+        <option>Другое</option>
+      </select>
+
+      <div class="row">
+        <div>
+          <label for="city">Город</label>
+          <input id="city">
+        </div>
+        <div>
+          <label for="country">Страна</label>
+          <input id="country">
+        </div>
+      </div>
+
+      <label for="description">Описание</label>
+      <textarea id="description"></textarea>
+
+      <div class="row">
+        <div>
+          <label for="lat">Широта</label>
+          <input id="lat" type="number" step="any" value="0">
+        </div>
+        <div>
+          <label for="lon">Долгота</label>
+          <input id="lon" type="number" step="any" value="0">
+        </div>
+      </div>
+
+      <button type="submit" id="save">Сохранить</button>
+      <div class="status" id="status"></div>
+    </form>
+    <div id="cards"></div>
+  </div>
+  <div id="map"></div>
+</main>
+<script src="leaflet/leaflet.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const map = L.map("map").setView([48.8566, 2.3522], 4);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap",
+  maxZoom: 19,
+}).addTo(map);
+let markers = [];
+let places = [];
+let suggestTimer = 0;
+let suggestGen = 0;
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function photoURL(rel) {
+  const name = String(rel).split("/").pop();
+  return "/api/photos/" + encodeURIComponent(name);
+}
+
+function setStatus(text, isError) {
+  $("status").textContent = text;
+  $("status").classList.toggle("error", Boolean(isError));
+}
+
+function drawMarkers() {
+  markers.forEach((m) => map.removeLayer(m));
+  markers = [];
+  for (const p of places) {
+    if (!p.latitude && !p.longitude) continue;
+    const m = L.circleMarker([p.latitude, p.longitude], {
+      radius: 8, color: "#1f6feb", fillColor: "#1f6feb", fillOpacity: 0.85,
+    }).addTo(map);
+    const where = [p.city, p.country].filter(Boolean).join(", ");
+    m.bindPopup(`<b>${esc(p.name)}</b><br>${esc(where)}`);
+    markers.push(m);
+  }
+  if (markers.length) {
+    map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2), { maxZoom: 12 });
+  }
+}
+
+function renderCards() {
+  const root = $("cards");
+  root.replaceChildren();
+  if (!places.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "Мест пока нет";
+    root.append(empty);
+    return;
+  }
+  for (const p of places) {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.dataset.id = String(p.id);
+    const where = [p.city, p.country].filter(Boolean).join(", ");
+    const images = (p.image_urls || []).map((rel) =>
+      `<img src="${esc(photoURL(rel))}" alt="">`).join("");
+    card.innerHTML = `
+      <h2>${esc(p.name)}</h2>
+      <p>${esc(p.category)}${where ? " · " + esc(where) : ""}</p>
+      <p>${esc(p.description || "")}</p>
+      ${images}
+      <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" aria-label="Фото для ${esc(p.name)}">
+    `;
+    card.querySelector("input").addEventListener("change", (ev) => uploadPhoto(p.id, ev.target));
+    card.addEventListener("click", (ev) => {
+      if (ev.target.closest("input")) return;
+      if (p.latitude || p.longitude) map.setView([p.latitude, p.longitude], 13);
+    });
+    root.append(card);
+  }
+}
+
+async function loadPlaces() {
+  const res = await fetch("/api/places");
+  if (!res.ok) throw new Error("не удалось загрузить места");
+  places = await res.json();
+  renderCards();
+  drawMarkers();
+}
+
+async function uploadPhoto(id, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  setStatus("Загружаю фото…");
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`/api/places/${id}/photos`, { method: "POST", body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    setStatus(data.error || "фото не сохранилось", true);
+    input.value = "";
+    return;
+  }
+  await loadPlaces();
+  setStatus("Фото прикреплено");
+}
+
+$("name").addEventListener("input", () => {
+  clearTimeout(suggestTimer);
+  const q = $("name").value.trim();
+  if (q.length < 3) {
+    $("suggestions").hidden = true;
+    $("hint").textContent = "";
+    return;
+  }
+  suggestTimer = setTimeout(() => requestSuggestions(q), 400);
+});
+
+async function requestSuggestions(q) {
+  const gen = ++suggestGen;
+  $("hint").textContent = "Ищу…";
+  const res = await fetch("/api/geocode?q=" + encodeURIComponent(q));
+  if (gen !== suggestGen) return;
+  const data = await res.json().catch(() => []);
+  if (!res.ok) {
+    $("hint").textContent = (data && data.error) || "Подсказки недоступны — заполните поля вручную";
+    $("suggestions").hidden = true;
+    return;
+  }
+  const list = $("suggestions");
+  list.replaceChildren();
+  for (const item of data) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = item.display_name;
+    btn.addEventListener("click", () => applySuggestion(item));
+    li.append(btn);
+    list.append(li);
+  }
+  list.hidden = data.length === 0;
+  $("hint").textContent = data.length
+    ? "Выберите подсказку или заполните поля вручную"
+    : "Ничего не найдено — заполните вручную";
+}
+
+function applySuggestion(item) {
+  if (item.name) $("name").value = item.name;
+  $("city").value = item.city || "";
+  $("country").value = item.country || "";
+  $("lat").value = item.latitude || 0;
+  $("lon").value = item.longitude || 0;
+  $("suggestions").hidden = true;
+  $("hint").textContent = "";
+  if (item.latitude || item.longitude) {
+    map.setView([item.latitude, item.longitude], 13);
+  }
+}
+
+$("place-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = $("name").value.trim();
+  if (!name) {
+    setStatus("Название обязательно", true);
+    return;
+  }
+  $("save").disabled = true;
+  setStatus("Сохраняю…");
+  const place = {
+    id: 0,
+    name,
+    category: $("category").value,
+    city: $("city").value.trim(),
+    country: $("country").value.trim(),
+    description: $("description").value.trim(),
+    latitude: Number($("lat").value) || 0,
+    longitude: Number($("lon").value) || 0,
+    is_favorite: false,
+    is_famous: false,
+    image_urls: [],
+  };
+  try {
+    const res = await fetch("/api/places", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(place),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "не удалось сохранить");
+    $("place-form").reset();
+    $("lat").value = "0";
+    $("lon").value = "0";
+    await loadPlaces();
+    setStatus(`Сохранено: ${data.name}`);
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    $("save").disabled = false;
+  }
+});
+
+loadPlaces().catch((err) => setStatus(err.message, true));
+</script>
+</body>
+</html>

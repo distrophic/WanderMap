@@ -261,6 +261,46 @@ func (r *Repo) Update(ctx context.Context, p *Place) error {
 	return checkAffected(res)
 }
 
+// Get читает одно место. Нужен загрузке фото: путь дописывается к уже сохранённой записи.
+func (r *Repo) Get(ctx context.Context, id int64) (Place, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT Id, Name, Category, City, Country, Description,
+		       Latitude, Longitude, IsFavorite, IsFamous, ImageUrls
+		FROM Places WHERE Id = ?`, id)
+	if err != nil {
+		return Place{}, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return Place{}, err
+		}
+		return Place{}, ErrNotFound
+	}
+	return scanPlace(rows)
+}
+
+// AddImage дописывает относительный путь (photos/…) в ImageUrls и возвращает место.
+func (r *Repo) AddImage(ctx context.Context, id int64, relPath string) (Place, error) {
+	p, err := r.Get(ctx, id)
+	if err != nil {
+		return Place{}, err
+	}
+	p.ImageURLs = append(p.ImageURLs, relPath)
+	urls, err := json.Marshal(p.ImageURLs)
+	if err != nil {
+		return Place{}, err
+	}
+	res, err := r.db.ExecContext(ctx, `UPDATE Places SET ImageUrls = ? WHERE Id = ?`, string(urls), id)
+	if err != nil {
+		return Place{}, err
+	}
+	if err := checkAffected(res); err != nil {
+		return Place{}, err
+	}
+	return p, nil
+}
+
 func (r *Repo) Delete(ctx context.Context, id int64) error {
 	res, err := r.db.ExecContext(ctx, `DELETE FROM Places WHERE Id = ?`, id)
 	if err != nil {

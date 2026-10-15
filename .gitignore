@@ -1,5 +1,5 @@
-cat > .gitignore << EOF
 __pycache__/
 *.pyc
 .venv/
-EOF
+*.exe
+backend/travelguide

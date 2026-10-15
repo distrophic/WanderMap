@@ -18,37 +18,60 @@ os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--disable-gpu"
 
 ASSETS = Path(__file__).parent.parent / "assets"
 
+def backend_candidates() -> list[Path]:
+    """Имена бинарника: на Windows Go дописывает .exe, без него файл не находится."""
+    root = Path(__file__).parent.parent
+    names = ["travelguide.exe", "travelguide"] if sys.platform == "win32" else ["travelguide"]
+    directories = [root / "backend", Path.cwd()]
+    return [directory / name for directory in directories for name in names]
+
+
 def ensure_backend() -> subprocess.Popen | None:
     """Возвращает процесс бэкенда, если пришлось запускать его самим."""
     try:
         requests.get(BASE_URL + "/api/countries", timeout=1)
-        return None  # уже работает (например, запущен через systemd)
+        return None  # уже работает — этот процесс не наш, при выходе его не гасим
     except requests.RequestException:
         pass
 
-    # Ищем бинарник рядом с проектом; на этапе Linux-упаковки
-    # путь станет /usr/bin/travelguide или systemd возьмёт запуск на себя.
-    candidates = [
-        Path(__file__).parent.parent / "backend" / "travelguide",
-        Path("travelguide"),
-    ]
-    exe = next((p for p in candidates if p.exists()), None)
+    exe = next((path for path in backend_candidates() if path.is_file()), None)
     if exe is None:
         raise RuntimeError(
             "Бэкенд не запущен и бинарник не найден.\n"
-            "Соберите его: cd backend && go build ./cmd/travelguide"
+            "Соберите его из каталога backend:\n"
+            "go build -o travelguide.exe ./cmd/travelguide"
         )
 
-    proc = subprocess.Popen([str(exe)])
+    # Без консольного окна: пользователь видит только Qt.
+    # CREATE_NEW_PROCESS_GROUP нужен, чтобы закрытие окна не задевало чужие процессы.
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+
+    proc = subprocess.Popen([str(exe)], creationflags=flags)
     for _ in range(25):  # ждём до 5 секунд
         time.sleep(0.2)
+        if proc.poll() is not None:
+            break
         try:
             requests.get(BASE_URL + "/api/countries", timeout=1)
             return proc
         except requests.RequestException:
             continue
-    proc.terminate()
+    stop_backend(proc)
     raise RuntimeError("Бэкенд запустился, но не отвечает.")
+
+
+def stop_backend(proc: subprocess.Popen) -> None:
+    """Гасит только тот процесс, который подняли мы сами."""
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5)
 
 def load_fonts(app: QApplication):
     """Подключает Inter; если файлов нет — остаёмся на системном шрифте."""
@@ -92,8 +115,7 @@ def main() -> int:
     code = app.exec()
 
     if backend is not None:
-        backend.terminate()  # Go-сторона ловит SIGTERM и делает graceful shutdown
-        backend.wait(timeout=5)
+        stop_backend(backend)
     return code
 
 if __name__ == "__main__":

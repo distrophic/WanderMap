@@ -3,6 +3,7 @@ package api
 import (
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"travelguide/internal/geo"
@@ -10,12 +11,13 @@ import (
 )
 
 type server struct {
-	repo *store.Repo
-	geo  *geo.Client
+	repo      *store.Repo
+	geo       *geo.Client
+	photosDir string
 }
 
-func New(repo *store.Repo, geocoder *geo.Client) http.Handler {
-	s := &server{repo: repo, geo: geocoder}
+func New(repo *store.Repo, geocoder *geo.Client, photosDir, webDir string) http.Handler {
+	s := &server{repo: repo, geo: geocoder, photosDir: photosDir}
 
 	// Роутинг стандартной библиотеки (Go 1.22+): методы и {id} в путях
 	// работают из коробки, сторонний роутер не нужен.
@@ -28,6 +30,19 @@ func New(repo *store.Repo, geocoder *geo.Client) http.Handler {
 	mux.HandleFunc("POST /api/places/{id}/toggle-famous", s.toggleFamous)
 	mux.HandleFunc("GET /api/countries", s.countries)
 	mux.HandleFunc("GET /api/geocode", s.geocode)
+	mux.HandleFunc("POST /api/places/{id}/photos", s.uploadPhoto)
+	mux.HandleFunc("GET /api/photos/{name}", s.servePhoto)
+	if webDir != "" {
+		// Страница прототипа. Маршруты /api/ выше конкретнее, чем «GET /».
+		files := http.FileServer(http.Dir(webDir))
+		mux.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				http.NotFound(w, r)
+				return
+			}
+			files.ServeHTTP(w, r)
+		}))
+	}
 
 	return logMiddleware(corsMiddleware(mux))
 }
